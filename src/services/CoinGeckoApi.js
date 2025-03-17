@@ -14,5 +14,18 @@ export default {
         const queryParams = { ...defaultParams, ...params };
         
         return API().get('/coins/markets', { params: queryParams });
+    },
+    
+    getCoinDetails(coinId) {
+        return API().get(`/coins/${coinId}`, {
+            params: {
+                localization: false,
+                tickers: false,
+                market_data: true,
+                community_data: true,
+                developer_data: false,
+                sparkline: false
+            }
+        });
     }
 }
