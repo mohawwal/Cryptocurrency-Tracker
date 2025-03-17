@@ -6,9 +6,11 @@
 			>
 				<Search class="w-4 h-4 text-gray-500" />
 				<input
+					v-model="searchQuery"
 					type="search"
 					placeholder="search..."
 					class="w-full bg-transparent outline-none px-2"
+					@input="filterCryptoData"
 				/>
 			</div>
 
@@ -43,9 +45,10 @@
 			<button
 				@click="fetchCryptoData"
 				class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg w-full lg:w-auto min-w-[200px] bg-primary border hover:border-foreground"
+				:disabled="isLoading"
 			>
-				<RefreshCw class="w-4 h-4" />
-				<p>Refresh</p>
+				<RefreshCw class="w-4 h-4" :class="{ 'animate-spin': isLoading }" />
+				<p>{{ isLoading ? 'Loading...' : 'Refresh' }}</p>
 			</button>
 		</header>
 		<div class="mt-5">
@@ -58,7 +61,7 @@
 					<li
 						v-for="(item, index) in menuItems"
 						:key="index"
-						@click="selectedItem = item.name"
+						@click="selectItem(item.name)"
 						class="flex items-center gap-2 px-3 py-2 rounded-sm"
 						:class="{
 							'bg-sidebar': selectedItem === item.name,
@@ -75,8 +78,9 @@
 			<div class="mt-5">
 				<CryptoList
 					:selectedItem="selectedItem"
-					:cryptoData="cryptoData"
+					:cryptoData="filteredCryptoData"
 					:selectedCurrency="selectedCurrency"
+					:isLoading="isLoading"
 				/>
 			</div>
 		</div>
@@ -84,7 +88,7 @@
 </template>
 
 <script setup>
-import { onMounted, computed } from "vue";
+import { onMounted, computed, watch } from "vue";
 import { ref } from "vue";
 import {
 	ChevronDown,
@@ -103,6 +107,10 @@ const showDropdown = ref(false);
 const currencies = ["USD", "EUR", "NGN", "GBP", "JPY"];
 const currencyDropdownRef = ref(null);
 const lastUpdated = ref(new Date().toLocaleTimeString());
+const searchQuery = ref("");
+const originalCryptoData = ref([]);
+const filteredCryptoData = ref([]);
+const isLoading = ref(true);
 
 const toggleCurrency = () => {
 	showDropdown.value = !showDropdown.value;
@@ -121,20 +129,54 @@ const menuItems = [
 ];
 
 const selectedItem = ref(menuItems[0].name);
-const cryptoData = ref([]);
 
 const fetchCryptoData = async (params = {}) => {
 	try {
+		isLoading.value = true;
 		const result = await CoinGeckoApi.getCryptoData({
 			vs_currency: selectedCurrency.value.toLowerCase(),
 			...params
 		});
-		cryptoData.value = result.data;
+		originalCryptoData.value = result.data;
+		filterCryptoData();
 		lastUpdated.value = new Date().toLocaleTimeString();
 	} catch (err) {
 		console.log("Error in fetchCryptoData:", err);
+	} finally {
+		isLoading.value = false;
 	}
 };
+
+const filterCryptoData = () => {
+	let filtered = [...originalCryptoData.value];
+	
+	if (searchQuery.value.trim() !== "") {
+		const query = searchQuery.value.toLowerCase();
+		filtered = filtered.filter(coin => 
+			coin.name.toLowerCase().includes(query) || 
+			coin.symbol.toLowerCase().includes(query)
+		);
+	}
+	
+	if (selectedItem.value === "Top Gainers") {
+		filtered = filtered.filter(coin => coin.price_change_percentage_24h > 0)
+			.sort((a, b) => b.price_change_percentage_24h - a.price_change_percentage_24h);
+	} else if (selectedItem.value === "Top Lost") {
+		filtered = filtered.filter(coin => coin.price_change_percentage_24h < 0)
+			.sort((a, b) => a.price_change_percentage_24h - b.price_change_percentage_24h);
+	}
+	
+	filteredCryptoData.value = filtered;
+};
+
+const selectItem = (itemName) => {
+	selectedItem.value = itemName;
+	filterCryptoData();
+};
+
+watch(searchQuery, () => {
+	filterCryptoData();
+});
 
 useClickOutside(currencyDropdownRef, () => {
 	showDropdown.value = false;
